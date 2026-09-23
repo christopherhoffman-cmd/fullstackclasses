@@ -1,0 +1,195 @@
+/* Reset Básico */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa;
+    color: #2b2d42;
+    line-height: 1.6;
+}
+
+/* Cabeçalho e Navegação */
+.header {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e9ecef;
+    padding: 15px 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.nav-menu {
+    display: flex;
+    justify-content: center;
+    gap: 25px;
+}
+
+.nav-menu a {
+    text-decoration: none;
+    color: #495057;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: color 0.2s ease;
+}
+
+.nav-menu a:hover {
+    color: #0056b3;
+}
+
+/* Container Principal */
+.container {
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+.hero-section {
+    text-align: center;
+    padding: 20px 0 10px;
+}
+
+.greeting {
+    font-size: 0.9rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+}
+
+.hero-section h1 {
+    font-size: 2.2rem;
+    color: #1a1a2e;
+    margin-bottom: 10px;
+}
+
+.subtitle {
+    font-size: 1.05rem;
+    color: #0056b3;
+    font-weight: 500;
+}
+
+.divider {
+    border: 0;
+    height: 1px;
+    background: #e0e0e0;
+    margin: 35px 0;
+}
+
+/* Seções */
+.section h2 {
+    font-size: 1.35rem;
+    color: #1a1a2e;
+    margin-bottom: 15px;
+}
+
+.section p {
+    color: #4a4a4a;
+    font-size: 1rem;
+    text-align: justify;
+}
+
+/* Badges de Conhecimentos */
+.skills-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.skill-badge {
+    background-color: #e9ecef;
+    color: #343a40;
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 0.88rem;
+    font-weight: 500;
+}
+
+.skill-badge.highlight {
+    background-color: #d0e1fd;
+    color: #004085;
+    border: 1px solid #b8daff;
+}
+
+/* Cards de Projetos */
+.cards-grid {
+    display: flex;
+    gap: 20px;
+    margin-top: 15px;
+}
+
+.card {
+    flex: 1;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.card h3 {
+    font-size: 1.05rem;
+    color: #0056b3;
+    margin-bottom: 8px;
+}
+
+.card p {
+    font-size: 0.92rem;
+    text-align: left;
+}
+
+/* Seção de Contato */
+.contato-section {
+    text-align: center;
+}
+
+.contato-section p {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.btn-group {
+    display: flex;
+    justify-content: center;
+}
+
+.btn {
+    display: inline-block;
+    padding: 12px 28px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background-color: #0056b3;
+    color: #ffffff;
+}
+
+.btn-primary:hover {
+    background-color: #004085;
+    box-shadow: 0 2px 6px rgba(0, 86, 179, 0.25);
+}
+
+/* Rodapé */
+.footer {
+    text-align: center;
+    padding: 25px 0;
+    color: #8d99ae;
+    font-size: 0.85rem;
+    border-top: 1px solid #e9ecef;
+    margin-top: 40px;
+}
+
+/* Responsividade Básica */
+@media (max-width: 600px) {
+    .cards-grid {
+        flex-direction: column;
+    }
+}

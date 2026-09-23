@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Participantes - React</title>
+    <!-- Bibliotecas do React e Babel via CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body style="font-family: sans-serif; padding: 20px;">
+
+    <!-- Ponto de entrada onde o React vai renderizar a aplicação -->
+    <div id="root"></div>
+
+    <!-- Código React (JSX) executado diretamente no navegador -->
+    <script type="text/babel">
+        const { useState } = React;
+
+        function App() {
+            const [nome, setNome] = useState('');
+            const [participantes, setParticipantes] = useState([]);
+
+            function adicionarParticipante(e) {
+                e.preventDefault();
+                const nomeFormatado = nome.trim();
+                if (!nomeFormatado) {
+                    alert('Por favor, digite um nome válido!');
+                    return;
+                }
+                setParticipantes([...participantes, nomeFormatado]);
+                setNome('');
+            }
+
+            function removerParticipante(indexParaRemover) {
+                setParticipantes(participantes.filter((_, index) => index !== indexParaRemover));
+            }
+
+            return (
+                <div style={{ maxWidth: '400px' }}>
+                    <h2>Mostra de Tecnologia - Lista de Participantes</h2>
+
+                    <form onSubmit={adicionarParticipante}>
+                        <input
+                            type="text"
+                            placeholder="Nome do participante"
+                            value={nome}
+                            onChange={(e) => setNome(e.target.value)}
+                        />
+                        <button type="submit">Cadastrar</button>
+                    </form>
+
+                    <h3>Participantes Inscritos ({participantes.length})</h3>
+
+                    {participantes.length === 0 ? (
+                        <p>Nenhum participante cadastrado ainda.</p>
+                    ) : (
+                        <ul>
+                            {participantes.map((item, index) => (
+                                <li key={index} style={{ marginBottom: '8px' }}>
+                                    {item}{' '}
+                                    <button onClick={() => removerParticipante(index)}>Excluir</button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            );
+        }
+
+        // Renderiza o componente dentro da div #root
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
