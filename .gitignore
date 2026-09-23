@@ -1,0 +1,42 @@
+# === Python e Bancos de Dados (Suas Adições) ===
+__pycache__/
+*.pyc
+*.sqlite3
+*.db
+
+# === Dependências e Ambientes Virtuais ===
+.venv/
+venv/
+env/
+ENV/
+node_modules/
+vendor/
+
+# === Arquivos de Configuração Sensíveis (Segurança) ===
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+*.cert
+
+# === Sistema Operacional ===
+.DS_Store
+._*
+Thumbs.db
+ehthumbs.db
+
+# === IDEs e Editores de Código ===
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# === Logs e Pastas de Build ===
+*.log
+logs/
+dist/
+build/
+out/
