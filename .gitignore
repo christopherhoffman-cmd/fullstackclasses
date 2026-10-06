@@ -1,0 +1,33 @@
+# Dependências
+node_modules/
+.pnp
+.pnp.js
+
+# Variáveis de ambiente e segredos
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Builds e artefatos
+dist/
+build/
+out/
+*.log
+
+# Python (caso use no backend ou scripts)
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Configurações de IDE e SO
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
