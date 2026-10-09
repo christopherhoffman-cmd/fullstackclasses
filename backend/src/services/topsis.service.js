@@ -1,112 +1,108 @@
-const SimulacaoModel = require('../models/simulacao.model.js');
-const CriterioModel = require('../models/criterio.model.js');
+const SimulacaoModel = require('../models/simulacao.model');
+const CriterioModel = require('../models/criterio.model');
+const MunicipioModel = require('../models/municipio.model');
+const MatrizModel = require('../models/matriz.model');
+const SimulacaoService = require('./simulacao.service');
+const engine = require('./topsis/topsis.engine');
+const AppError = require('../utils/AppError');
+const { numeroOuNulo, idValido } = require('../utils/validacao');
+
+function selecionarCriterios(todos, criteriosReq) {
+  let selecionados;
+  if (Array.isArray(criteriosReq) && criteriosReq.length) {
+    selecionados = criteriosReq.map((c) => {
+      const id = idValido(c.id);
+      const base = todos.find((t) => t.id === id);
+      if (!base) throw new AppError(`Critério ${id} não encontrado.`, 422);
+      const peso = c.peso === undefined ? base.peso : numeroOuNulo(c.peso, 'peso');
+      if (peso === null || peso < 0) throw new AppError('Os pesos devem ser números não negativos.', 422);
+      return { ...base, tipo: c.tipo === 'custo' || c.tipo === 'beneficio' ? c.tipo : base.tipo, peso };
+    });
+  } else {
+    selecionados = todos.map((c) => ({ ...c }));
+  }
+  selecionados = selecionados.filter((c) => c.peso > 0);
+  if (selecionados.length === 0) throw new AppError('Selecione ao menos um critério com peso maior que zero.', 422);
+  return selecionados;
+}
 
 class TopsisService {
-  /**
-   * Executa o algoritmo TOPSIS
-   * @param {Array} dadosEntrada - Matriz contendo alternativas e critérios
-   * @param {Array} pesosCustomizados - Pesos informados na requisição (opcional)
-   */
-  static async executarAnalise(pesosCustomizados = null) {
-    // 1. Obter critérios e matriz de decisão do banco de dados
-    const criterios = await CriterioModel.buscarTodos();
-    const matrizBruta = await SimulacaoModel.buscarMatrizDecisao();
+  static async executarAnalise(entrada = {}, usuario) {
+    const municipioIds = Array.isArray(entrada.municipios) ? entrada.municipios.map(idValido) : null;
 
-    // Sobrescrever pesos se fornecidos pelo frontend
-    if (pesosCustomizados && Array.isArray(pesosCustomizados)) {
-      pesosCustomizados.forEach((pc) => {
-        const crit = criterios.find((c) => c.id === pc.id);
-        if (crit) crit.peso = parseFloat(pc.peso);
-      });
+    const [todosCriterios, todosMunicipios, valores] = await Promise.all([
+      CriterioModel.buscarTodos(),
+      MunicipioModel.buscarTodos(),
+      MatrizModel.buscarValores(),
+    ]);
+    const criterios = selecionarCriterios(todosCriterios, entrada.criterios);
+
+    const valoresPorMunicipio = {};
+    valores.forEach((v) => {
+      (valoresPorMunicipio[v.municipio_id] ||= {})[v.criterio_id] = v.valor;
+    });
+
+    const candidatos = municipioIds
+      ? todosMunicipios.filter((m) => municipioIds.includes(m.id))
+      : todosMunicipios;
+
+    const alternativas = [];
+    candidatos.forEach((m) => {
+      const vals = valoresPorMunicipio[m.id] || {};
+      const completo = criterios.every((c) => vals[c.id] !== undefined && vals[c.id] !== null);
+      if (completo) alternativas.push({ ...m, valores: vals });
+    });
+
+    if (alternativas.length < 2) {
+      throw new AppError('São necessários ao menos 2 municípios com todos os valores dos critérios selecionados.', 422);
     }
 
-    // Estruturar dados por município
-    const municipiosMap = {};
-    matrizBruta.forEach((row) => {
-      if (!municipiosMap[row.municipio_id]) {
-        municipiosMap[row.municipio_id] = {
-          municipio_id: row.municipio_id,
-          nome: row.municipio_nome,
-          valores: {},
-        };
-      }
-      municipiosMap[row.municipio_id].valores[row.criterio_id] = parseFloat(row.valor);
-    });
-
-    const municipios = Object.values(municipiosMap);
-    const criterioIds = criterios.map((c) => c.id);
-
-    // Passo A: Normalização Vetorial -> r_ij = x_ij / sqrt(sum(x_ij^2))
-    const normas = {};
-    criterioIds.forEach((cId) => {
-      const somaQuadrados = municipios.reduce(
-        (sum, m) => sum + Math.pow(m.valores[cId] || 0, 2),
-        0
+    const matriz = alternativas.map((a) => criterios.map((c) => a.valores[c.id]));
+    if (!matriz.flat().every(Number.isFinite)) throw new AppError('A matriz contém valores não numéricos.', 422);
+    let resultado;
+    try {
+      resultado = engine.calcularDetalhado(
+        matriz,
+        criterios.map((c) => c.peso),
+        criterios.map((c) => c.tipo)
       );
-      normas[cId] = Math.sqrt(somaQuadrados) || 1;
-    });
+    } catch (error) {
+      throw new AppError(error.message, 422);
+    }
 
-    // Passo B: Matriz Ponderada -> v_ij = w_j * r_ij
-    const ponderada = municipios.map((m) => {
-      const v = {};
-      criterioIds.forEach((cId) => {
-        const crit = criterios.find((c) => c.id === cId);
-        v[cId] = ((m.valores[cId] || 0) / normas[cId]) * crit.peso;
-      });
-      return { ...m, ponderada: v };
-    });
+    const ranking = resultado.ranking.map((r) => ({
+      municipio_id: alternativas[r.indice].id,
+      ci: r.ci,
+      dPlus: r.dPlus,
+      dMinus: r.dMinus,
+      posicao: r.posicao,
+    }));
 
-    // Passo C: Solução Ideal Positiva (A+) e Negativa (A-)
-    const aPlus = {};
-    const aMinus = {};
-    criterios.forEach((crit) => {
-      const valoresCol = ponderada.map((p) => p.ponderada[crit.id]);
-      if (crit.tipo === 'beneficio') {
-        aPlus[crit.id] = Math.max(...valoresCol);
-        aMinus[crit.id] = Math.min(...valoresCol);
-      } else {
-        aPlus[crit.id] = Math.min(...valoresCol);
-        aMinus[crit.id] = Math.max(...valoresCol);
-      }
-    });
+    const porCriterio = (vetor) => Object.fromEntries(criterios.map((c, j) => [c.id, vetor[j]]));
+    const parametros = {
+      criterios: criterios.map((c, j) => ({
+        id: c.id,
+        codigo: c.codigo,
+        nome: c.nome,
+        tipo: c.tipo,
+        unidade: c.unidade,
+        peso: c.peso,
+        peso_normalizado: resultado.pesosNormalizados[j],
+      })),
+      municipios: alternativas.map((a) => a.id),
+      valores: Object.fromEntries(
+        alternativas.map((a) => [a.id, Object.fromEntries(criterios.map((c) => [c.id, a.valores[c.id]]))])
+      ),
+      solucao_ideal_positiva: porCriterio(resultado.aPlus),
+      solucao_ideal_negativa: porCriterio(resultado.aMinus),
+    };
 
-    // Passo D: Distâncias Euclidianas e Coeficiente de Proximidade (Ci)
-    const resultados = ponderada.map((p) => {
-      const dPlus = Math.sqrt(
-        criterioIds.reduce((sum, cId) => sum + Math.pow(p.ponderada[cId] - aPlus[cId], 2), 0)
-      );
-
-      const dMinus = Math.sqrt(
-        criterioIds.reduce((sum, cId) => sum + Math.pow(p.ponderada[cId] - aMinus[cId], 2), 0)
-      );
-
-      const ci = dPlus + dMinus === 0 ? 0 : dMinus / (dPlus + dMinus);
-
-      return {
-        municipio_id: p.municipio_id,
-        nome: p.nome,
-        dPlus,
-        dMinus,
-        ci,
-      };
-    });
-
-    // Ordenação do Ranking (Maior Ci = Menos Vulnerável / Melhor Posição)
-    resultados.sort((a, b) => b.ci - a.ci);
-    resultados.forEach((item, index) => {
-      item.posicao = index + 1;
-    });
-
-    // Persistir resultado da simulação no banco
-    const simulacaoSalva = await SimulacaoModel.salvarSimulacao(
-      { pesos: criterios.map((c) => ({ id: c.id, peso: c.peso })) },
-      resultados
+    const salva = await SimulacaoModel.salvarSimulacao(
+      { parametros, descricao: entrada.descricao?.toString().slice(0, 200), usuarioId: usuario?.id },
+      ranking
     );
 
-    return {
-      simulacao_id: simulacaoSalva.id,
-      ranking: resultados,
-    };
+    return SimulacaoService.obter(salva.id);
   }
 }
 
