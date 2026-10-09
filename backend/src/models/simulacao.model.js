@@ -1,64 +1,83 @@
 const db = require('../config/db');
 
 class SimulacaoModel {
-  static async salvarSimulacao(parametros, resultados) {
-    const client = await db.pool.connect();
-    try {
-      await client.query('BEGIN');
+  static async salvarSimulacao({ parametros, descricao, usuarioId }, resultados) {
+    return db.transaction(async (client) => {
+      const resSimulacao = await client.query(
+        `INSERT INTO simulacoes (parametros, usuario_id, descricao)
+         VALUES ($1, $2, $3)
+         RETURNING id, data_execucao;`,
+        [JSON.stringify(parametros), usuarioId || null, descricao || null]
+      );
+      const { id, data_execucao } = resSimulacao.rows[0];
 
-      // 1. Registra a simulação
-      const simulacaoQuery = `
-        INSERT INTO simulacoes (parametros, status)
-        VALUES ($1, 'concluida')
-        RETURNING id, data_execucao;
-      `;
-      const resSimulacao = await client.query(simulacaoQuery, [JSON.stringify(parametros)]);
-      const simulacaoId = resSimulacao.rows[0].id;
-
-      // 2. Registra os resultados ordenados do ranking
-      for (const item of resultados) {
-        const rankingQuery = `
-          INSERT INTO resultados_ranking 
-            (simulacao_id, municipio_id, coeficiente_ci, distancia_positiva, distancia_negativa, posicao)
-          VALUES ($1, $2, $3, $4, $5, $6);
-        `;
-        await client.query(rankingQuery, [
-          simulacaoId,
-          item.municipio_id,
-          item.ci,
-          item.dPlus,
-          item.dMinus,
-          item.posicao,
-        ]);
+      if (resultados.length) {
+        const valores = [];
+        const placeholders = resultados.map((item, i) => {
+          const b = i * 6;
+          valores.push(id, item.municipio_id, item.ci, item.dPlus, item.dMinus, item.posicao);
+          return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6})`;
+        });
+        await client.query(
+          `INSERT INTO resultados_ranking
+             (simulacao_id, municipio_id, coeficiente_ci, distancia_positiva, distancia_negativa, posicao)
+           VALUES ${placeholders.join(', ')};`,
+          valores
+        );
       }
 
-      await client.query('COMMIT');
-      return { id: simulacaoId, total_avaliados: resultados.length };
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
+      return { id, data_execucao, total_avaliados: resultados.length };
+    });
   }
 
-  static async buscarMatrizDecisao() {
+  static async listar({ limite = 50 } = {}) {
     const query = `
-      SELECT 
-        m.id AS municipio_id,
-        m.nome AS municipio_nome,
-        c.id AS criterio_id,
-        c.nome AS criterio_nome,
-        c.tipo AS criterio_tipo,
-        c.peso AS criterio_peso,
-        md.valor
-      FROM matriz_decisao md
-      JOIN municipios m ON md.municipio_id = m.id
-      JOIN criterios c ON md.criterio_id = c.id
-      ORDER BY m.id, c.id;
+      SELECT s.id, s.data_execucao, s.descricao,
+        u.nome AS usuario_nome,
+        (SELECT COUNT(*) FROM resultados_ranking r WHERE r.simulacao_id = s.id) AS total_municipios,
+        jsonb_array_length(COALESCE(s.parametros->'criterios', '[]'::jsonb)) AS total_criterios,
+        (SELECT m.nome FROM resultados_ranking r JOIN municipios m ON m.id = r.municipio_id
+          WHERE r.simulacao_id = s.id ORDER BY r.posicao ASC LIMIT 1) AS melhor_municipio,
+        (SELECT m.nome FROM resultados_ranking r JOIN municipios m ON m.id = r.municipio_id
+          WHERE r.simulacao_id = s.id ORDER BY r.posicao DESC LIMIT 1) AS mais_vulneravel
+      FROM simulacoes s
+      LEFT JOIN usuarios u ON u.id = s.usuario_id
+      ORDER BY s.data_execucao DESC, s.id DESC
+      LIMIT $1;
     `;
-    const { rows } = await db.query(query);
+    const { rows } = await db.query(query, [limite]);
     return rows;
+  }
+
+  static async buscarPorId(id) {
+    const { rows } = await db.query(
+      `SELECT s.*, u.nome AS usuario_nome
+       FROM simulacoes s LEFT JOIN usuarios u ON u.id = s.usuario_id
+       WHERE s.id = $1;`,
+      [id]
+    );
+    if (!rows[0]) return null;
+    const resultados = await db.query(
+      `SELECT r.municipio_id, m.nome, m.uf, m.latitude, m.longitude, m.populacao, m.idh,
+         r.coeficiente_ci AS ci, r.distancia_positiva AS "dPlus",
+         r.distancia_negativa AS "dMinus", r.posicao
+       FROM resultados_ranking r
+       JOIN municipios m ON m.id = r.municipio_id
+       WHERE r.simulacao_id = $1
+       ORDER BY r.posicao ASC;`,
+      [id]
+    );
+    return { ...rows[0], ranking: resultados.rows };
+  }
+
+  static async buscarUltimaId() {
+    const { rows } = await db.query('SELECT id FROM simulacoes ORDER BY data_execucao DESC, id DESC LIMIT 1;');
+    return rows[0]?.id;
+  }
+
+  static async remover(id) {
+    const { rowCount } = await db.query('DELETE FROM simulacoes WHERE id = $1;', [id]);
+    return rowCount > 0;
   }
 }
 
